@@ -4,7 +4,7 @@ import {
   ResponsiveContainer, BarChart, Bar, Cell ,CartesianGrid
 } from "recharts";
 import AvalancheTrustLayerPage from "../avalanche/page";
-import LeafDiagnosisPage from "./LeafDiagnosisPage";
+import LeafDiagnosisPage, { type LeafDiagnosis } from "./LeafDiagnosisPage";
 
 // ─── THEME ────────────────────────────────────────────────────────
 const F = {
@@ -188,11 +188,11 @@ async function getAIRecommendation(farmer, weather) {
   return JSON.parse(data.reply.replace(/```json|```/g, "").trim());
 }
 
-async function chatWithAI(farmer, weather, history, message) {
+async function chatWithAI(farmer, weather, history, message, diagnosis) {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ farmer, weather, history, message }),
+    body: JSON.stringify({ farmer, weather, history, message, diagnosis }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Unable to generate a chat response.");
@@ -1091,7 +1091,7 @@ function MarketPage({ data }) {
 }
 
 // ─── CHAT PAGE ────────────────────────────────────────────────────
-function ChatPage({ weather }) {
+function ChatPage({ weather, diagnosis, initialQuestion, onQuestionConsumed }) {
   const [chat, setChat] = useState([
     { role: "ai", text: "Hello " + FARMER.name + "! I'm AgriMind, your AI farming assistant. Ask me anything about your " + FARMER.crop + " farm — disease risks, irrigation, market prices, or anything else!" }
   ]);
@@ -1101,6 +1101,12 @@ function ChatPage({ weather }) {
 
   const chatEndRef = useRef(null);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat]);
+  useEffect(() => {
+    if (initialQuestion) {
+      setInput(initialQuestion);
+      onQuestionConsumed();
+    }
+  }, [initialQuestion, onQuestionConsumed]);
 
   async function send() {
     if (!input.trim() || loading) return;
@@ -1108,7 +1114,7 @@ function ChatPage({ weather }) {
     setChat(c => [...c, { role: "user", text: q }]);
     setLoading(true);
     try {
-      const ans = await chatWithAI(FARMER, weather, chat, q);
+      const ans = await chatWithAI(FARMER, weather, chat, q, diagnosis);
       setChat(c => [...c, { role: "ai", text: ans }]);
     } catch (error) {
       setChat(c => [...c, {
@@ -1131,6 +1137,12 @@ function ChatPage({ weather }) {
           <div style={{ fontSize: 12, color: F.green }}>● Online — AI-powered farming assistant</div>
         </div>
       </div>
+
+      {diagnosis && (
+        <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, background: F.greenBg, color: F.text, fontSize: 13, lineHeight: 1.5 }}>
+          🌿 Your latest leaf scan ({diagnosis.is_healthy ? "healthy leaf" : diagnosis.name || diagnosis.condition || "diagnosis"}) is included as context for this chat.
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
         {SUGGESTIONS.map(s => (
@@ -1248,6 +1260,9 @@ export default function FarmerDashboard({ onSwitchToMachine }) {
   const [done,      setDone]      = useState(false);
   const [weather,   setWeather]   = useState(WEATHER_MOCK);
   const [weatherError, setWeatherError] = useState("");
+  const [leafDiagnosis, setLeafDiagnosis] = useState<LeafDiagnosis | null>(null);
+  const [chatQuestion, setChatQuestion] = useState("");
+  const clearChatQuestion = useCallback(() => setChatQuestion(""), []);
 
   useEffect(() => {
     loadData();
@@ -1306,14 +1321,25 @@ export default function FarmerDashboard({ onSwitchToMachine }) {
   const pages = {
     dashboard:      <DashboardPage data={data} loading={loading} onMarkDone={() => setDone(true)} done={done} setPage={setPage} />,
     farm:           <MyFarmPage />,
-    "leaf-diagnosis": <LeafDiagnosisPage />,
+    "leaf-diagnosis": <LeafDiagnosisPage
+      onDiagnosisChange={setLeafDiagnosis}
+      onAskAssistant={(question) => {
+        setChatQuestion(question);
+        setPage("chat");
+      }}
+    />,
     weather:        <WeatherPage weather={weather} weatherError={weatherError} />,
     alerts:         <AlertsPage data={data} />,
     recommendations:<RecommendationsPage data={data} />,
     market:         <MarketPage data={data} />,
     records:        <RecordsPage />,
     avalanche:      <AvalancheTrustLayerPage />,
-    chat:           <ChatPage weather={weather} />,
+    chat:           <ChatPage
+      weather={weather}
+      diagnosis={leafDiagnosis}
+      initialQuestion={chatQuestion}
+      onQuestionConsumed={clearChatQuestion}
+    />,
   };
 
   return (

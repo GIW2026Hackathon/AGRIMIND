@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type Diagnosis = {
+export type LeafDiagnosis = {
   name?: string;
   scientific_name?: string;
   crop?: string;
@@ -37,13 +37,21 @@ const palette = {
   red: "#b42318",
 };
 
-export default function LeafDiagnosisPage() {
+type LeafDiagnosisPageProps = {
+  onDiagnosisChange?: (diagnosis: LeafDiagnosis | null) => void;
+  onAskAssistant?: (question: string) => void;
+};
+
+export default function LeafDiagnosisPage({
+  onDiagnosisChange,
+  onAskAssistant,
+}: LeafDiagnosisPageProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
   const previewUrl = useRef<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
+  const [diagnosis, setDiagnosis] = useState<LeafDiagnosis | null>(null);
   const [health, setHealth] = useState<ServiceHealth | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -68,6 +76,7 @@ export default function LeafDiagnosisPage() {
   function selectFile(selected: File | undefined) {
     setError("");
     setDiagnosis(null);
+    onDiagnosisChange?.(null);
     if (!selected) return;
     const clearSelection = () => {
       setFile(null);
@@ -96,6 +105,7 @@ export default function LeafDiagnosisPage() {
     setLoading(true);
     setError("");
     setDiagnosis(null);
+    onDiagnosisChange?.(null);
     const body = new FormData();
     body.append("image", file);
 
@@ -103,7 +113,8 @@ export default function LeafDiagnosisPage() {
       const response = await fetch("/api/leaf-diagnosis", { method: "POST", body });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || data.detail || "Leaf analysis failed.");
-      setDiagnosis(data as Diagnosis);
+      setDiagnosis(data as LeafDiagnosis);
+      onDiagnosisChange?.(data as LeafDiagnosis);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Leaf analysis failed. Try again.");
     } finally {
@@ -177,6 +188,13 @@ export default function LeafDiagnosisPage() {
             {diagnosis.symptoms?.length ? <ResultList title="Observed symptoms" items={diagnosis.symptoms} /> : null}
             {diagnosis.treatment?.length ? <ResultList title="Treatment" items={diagnosis.treatment} /> : null}
             {diagnosis.prevention?.length ? <ResultList title="Prevention" items={diagnosis.prevention} /> : null}
+            {onAskAssistant && <button
+              type="button"
+              onClick={() => onAskAssistant("Please explain my leaf scan results in simple terms. What do the identified condition, confidence, and severity mean, and what should I do next?")}
+              style={{ border: 0, borderRadius: 8, padding: "11px 14px", background: palette.green, color: "#fff", cursor: "pointer", fontWeight: 700 }}
+            >
+              Ask AgriMind to explain this scan
+            </button>}
           </div>}
         </div>
       </div>
